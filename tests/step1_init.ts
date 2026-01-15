@@ -24,9 +24,9 @@ describe("Step 1: Initialize Pay Request", () => {
   const RECEIVER_SECRET =
     "45XNgJWAzqh6UsAVnJbhKmvaiGtsrmkt6XdYy4zNcnhhisNVCC13zGU8d9C8PCjAUxSqW9gXUX4WsQb5nhtN6Bsu";
 
-  // Real Token-2022 Mint provided by user
+  // Alpha Token (5% Tax, Renounced)
   const MINT_ADDRESS = new PublicKey(
-    "75hJRLXF6mwdYxauFaUxZPqdesZKxzV1D25ueG6FKeh9"
+    "5bFbWeTaXDhKW33JiMCajWpKT6n1RomzHjAkRCKTY8Kc"
   );
 
   let payerWallet: Keypair;

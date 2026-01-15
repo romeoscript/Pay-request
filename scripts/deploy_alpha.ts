@@ -43,37 +43,46 @@ const bs58 = require("bs58");
 import * as fs from "fs";
 import * as os from "os";
 
-const SPL_TOKEN_2022_PROGRAM_ID = publicKey(
-  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-);
-
+// Helper to load keypair
 function loadKeypair(path: string): Keypair {
   const keypairData = JSON.parse(fs.readFileSync(path, "utf-8"));
   return Keypair.fromSecretKey(new Uint8Array(keypairData));
 }
 
+// Token Metadata Program ID for Token-2022
+const SPL_TOKEN_2022_PROGRAM_ID = publicKey(
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+);
+
 async function main() {
+  // Connect to Devnet
   const connection = new Connection(
     "https://api.devnet.solana.com",
     "confirmed"
   );
   console.log("Connected to Devnet");
 
+  // Load Payer (Deployer)
   const homeDir = os.homedir();
   const payer = loadKeypair(`${homeDir}/.config/solana/id.json`);
   console.log(`Payer: ${payer.publicKey.toBase58()}`);
 
+  // Generate Mint Keypair
   const mintKeypair = Keypair.generate();
-  console.log(`Mint: ${mintKeypair.publicKey.toBase58()}`);
+  console.log(`new Mint Address: ${mintKeypair.publicKey.toBase58()}`);
 
+  // Generate Tax Wallet (Fee Collector)
+  // "This can go to any other wallet that you want to define"
   const taxWallet = Keypair.generate();
-  console.log(`Tax Wallet: ${taxWallet.publicKey.toBase58()}`);
-  console.log(`Secret: [${taxWallet.secretKey.toString()}]`);
+  console.log(`Tax Wallet (Fee Collector): ${taxWallet.publicKey.toBase58()}`);
+  console.log(`Tax Wallet Secret: [${taxWallet.secretKey.toString()}]`);
+  console.log("SAVE THIS SECRET if you want to access the collected fees!");
 
+  // Configurations
   const decimals = 9;
-  const supply = 1_000_000n * BigInt(10 ** decimals);
+  const supply = 1_000_000n * BigInt(10 ** decimals); // 1 Million
   const feeBasisPoints = 500; // 5%
-  const maxFee = BigInt(1_000_000) * BigInt(10 ** decimals);
+  const maxFee = BigInt(1_000_000) * BigInt(10 ** decimals); // Max fee cap (set high to effectively be 5%)
 
   // 1. Create Mint with Transfer Fee Config
   const extensions = [ExtensionType.TransferFeeConfig];
@@ -90,8 +99,8 @@ async function main() {
     }),
     createInitializeTransferFeeConfigInstruction(
       mintKeypair.publicKey,
-      payer.publicKey, // config auth
-      taxWallet.publicKey, // withdraw auth
+      payer.publicKey, // config auth (temporarily payer, to be renounced)
+      taxWallet.publicKey, // withdraw auth (tax wallet)
       feeBasisPoints,
       maxFee,
       TOKEN_2022_PROGRAM_ID
@@ -99,7 +108,7 @@ async function main() {
     createInitializeMintInstruction(
       mintKeypair.publicKey,
       decimals,
-      payer.publicKey, // mint auth
+      payer.publicKey, // mint auth (temporarily payer)
       null, // freeze auth
       TOKEN_2022_PROGRAM_ID
     )
@@ -110,17 +119,17 @@ async function main() {
     payer,
     mintKeypair,
   ]);
-  console.log("Mint Created.");
+  console.log("Mint Initiated.");
 
-  // 2. Create Metadata (Using createV1)
+  // 2. Create Metadata (Alpha Token)
   console.log("Creating Metadata...");
   const umi = createUmi("https://api.devnet.solana.com");
   const signer = createSignerFromKeypair(umi, fromWeb3JsKeypair(payer));
   umi.use(signerIdentity(signer, true));
 
   const ourMetadata = {
-    name: "Romeoscript",
-    symbol: "ROMEO",
+    name: "Alpha",
+    symbol: "Alpha",
     uri: "",
   };
 
@@ -155,11 +164,11 @@ async function main() {
     printSupply: none<PrintSupply>(),
   };
 
-  const tx = await createV1(umi, { ...accounts, ...data }).sendAndConfirm(umi);
+  await createV1(umi, { ...accounts, ...data }).sendAndConfirm(umi);
   console.log("Metadata Created.");
 
-  // 3. Mint Tokens
-  console.log("Minting tokens...");
+  // 3. Mint Tokens to Payer
+  console.log(`Minting ${supply} tokens to Payer...`);
   const payerATA = getAssociatedTokenAddressSync(
     mintKeypair.publicKey,
     payer.publicKey,
@@ -187,14 +196,18 @@ async function main() {
   await sendAndConfirmTransaction(connection, mintTx, [payer]);
   console.log("Tokens Minted.");
 
-  // 4. Renounce
+  // 4. Renounce Ownership
+  // "no one else in the World can ever claim/take ownership"
+  // We renounce:
+  // - Mint Authority: No more tokens can be minted (Fixed Supply).
+  // - Transfer Fee Config Authority: The 5% tax cannot be changed.
   console.log("Renouncing Ownership...");
   const renounceTx = new Transaction().add(
     createSetAuthorityInstruction(
       mintKeypair.publicKey,
       payer.publicKey,
       AuthorityType.MintTokens,
-      null,
+      null, // Set to None
       [],
       TOKEN_2022_PROGRAM_ID
     ),
@@ -202,22 +215,25 @@ async function main() {
       mintKeypair.publicKey,
       payer.publicKey,
       AuthorityType.TransferFeeConfig,
-      null,
+      null, // Set to None
       [],
       TOKEN_2022_PROGRAM_ID
     )
   );
+
   const renounceSig = await sendAndConfirmTransaction(connection, renounceTx, [
     payer,
   ]);
   console.log(
-    `Renounced: https://explorer.solana.com/tx/${renounceSig}?cluster=devnet`
+    `Renounced Tx: https://explorer.solana.com/tx/${renounceSig}?cluster=devnet`
   );
 
-  console.log("\n--- DEPLOYMENT SUCCESS ---");
-  console.log(`Mint: ${mintKeypair.publicKey.toBase58()}`);
-  console.log(`Tax Wallet: ${taxWallet.publicKey.toBase58()}`);
-  console.log(`Secret: [${taxWallet.secretKey.toString()}]`);
+  console.log("\n--- DEPLOYMENT COMPLETE ---");
+  console.log(`Mint Address:  ${mintKeypair.publicKey.toBase58()}`);
+  console.log(`Ticker:        Alpha`);
+  console.log(`Tax:           5%`);
+  console.log(`Tax Wallet:    ${taxWallet.publicKey.toBase58()}`);
+  console.log(`NOTE: Save the Tax Wallet Secret Key printed above!`);
 }
 
 main().catch(console.error);
