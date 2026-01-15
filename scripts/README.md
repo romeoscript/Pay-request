@@ -17,3 +17,12 @@ This folder contains scripts for deploying and managing the project's tokens.
 ```bash
 npx ts-node scripts/deploy_alpha.ts
 ```
+
+### Detailed Script Breakdown
+
+1.  **Mint Creation**: Initializes the Mint Account with **Transfer Fee Config**, setting the 5% tax and designating the tax wallet.
+2.  **Metadata**: Uses Metaplex Umi to set the on-chain name ("Alpha") and symbol.
+3.  **Minting**: Mints the entire fixed supply (1,000,000) to the deployer's wallet.
+4.  **Renouncement**:
+    *   Sets **Mint Authority** to `null` (Preventing future minting).
+    *   Sets **Transfer Fee Config Authority** to `null` (Locking the tax rate at 5% forever).
