@@ -1,57 +1,35 @@
-# Making Pay Request Less Traceable with Zero-Knowledge Proofs
+# Pay Request Privacy with Light Protocol & ZK Compression
+
+To make the Pay Request system untraceable, we use **Light Protocol (ZK Compression)**. This is the optimal architecture for privacy and cost on Solana.
 
 ## Overview
-Currently, the Pay Request system uses a PDA specific to a `request_id`. An observer can track the flow of funds: `Payer -> PayRequest PDA -> Receiver`. This makes the transaction linkable.
-
-To break this link, we can implement a **Shielded Pool** using ZK-SNARKs. The core idea is to decouple the deposit (Settlement) from the withdrawal (Sweep).
+Instead of standard PDAs (accounts), we use **Compressed Accounts** to store the pending payments. This breaks the on-chain link between the Payer and final Receiver.
 
 ## Architecture
 
-We introduce a global **Shielded Pool Account** that holds funds for all requests, governed by a Merkle Tree.
+### 1. Setup (Off-Chain)
+*   **Receiver** generates a **Light Shielded Address**. This address is distinct from their standard SOL public key.
+*   **Request Creation**: The Pay Request includes this Shielded Address (encrypted or hashed) instead of a standard public key.
 
-### 3rd Parties: The Relayer
-To ensure the Receiver's destination wallet remains anonymous, it cannot hold any SOL to pay for the "Sweep" transaction gas (funding it from a known wallet would reveal its identity).
-*   **Role**: Submits the ZK proof and the sweep transaction on-chain.
-*   **Incentive**: Takes a small fee from the swept amount.
-*   **Trust**: Minimal. The Relayer cannot steal funds (guaranteed by the ZK proof) nor censor indefinitely (Receiver can use another relayer or paying gas themselves if they don't care about gas-linkability).
+### 2. Settle (The "Compression" Event)
+*   **Action**: Payer sends SOL to the Pay Request Program.
+*   **Logic**: The program invokes the **Light Protocol CPI** to "compress" this SOL.
+*   **On-Chain Result**: 
+    *   Funds move to the Light Protocol State/Vault.
+    *   A new **Compressed UTXO** (Unspent Transaction Output) is created, owned by the Receiver's Shielded Address.
+    *   **Privacy**: Observers see `Payer -> Light Protocol`. The destination is encrypted within the compressed state. The Payer's deposit is mixed with thousands of other Light Protocol transactions, providing a large anonymity set.
 
-### Circuits & Logic
+### 3. Sweep (The "Decompression" Event)
+*   **Action**: Receiver wants to withdraw funds to a standard SOL wallet (or keeping them private).
+*   **Logic**: Receiver generates a **Zero-Knowledge Validity Proof** locally (using Light SDK).
+    *   *Proof Statement*: "I own a UTXO in the compressed state worth X SOL, and I authorize moving it."
+*   **Transaction**: Receiver (or a Relayer) submits this proof on-chain.
+*   **On-Chain Result**: 
+    *   Light Protocol verifies the proof.
+    *   Funds are "decompressed" and sent to the target wallet (e.g., a fresh exchange deposit address).
+    *   **Privacy**: The link between the original Payer and this withdrawal is cryptographic and zero-knowledge. There is no public graph connecting them.
 
-We utilize a **Join-Split** style circuit (similar to Tornado Cash or SPL Token-2022 Confidential Transfers).
-
-#### 1. Setup (Off-chain)
-*   The Receiver generates two random secrets:
-    *   `secret_key`: Private key to control funds.
-    *   `nullifier_key`: Private key to prevent double spending.
-*   They compute a **Commitment**: `C = Hash(secret_key, nullifier_key)`.
-*   The Receiver generates the "Pay Request" containing this `Commitment`.
-
-#### 2. Settle (On-chain Deposit)
-*   **Payer** calls `settle(amount, commitment)`.
-*   **Program**:
-    *   Transfers `amount` from Payer to the **Shielded Pool**.
-    *   Inserts `commitment` into the on-chain **Merkle Tree**.
-    *   Emits an event with the specific Merkle Leaf Index.
-*   **Privacy**: The Payer knows which commitment they funded, but the on-chain link only shows `Payer -> Shielded Pool`.
-
-#### 3. Proving (Off-chain)
-*   Receiver waits for the deposit.
-*   Receiver constructs a **Zero-Knowledge Proof** (?) satisfying:
-    *   "I know `secret_key` and `nullifier_key` such that `Hash(secret_key, nullifier_key)` is a leaf in the Merkle Tree Root `R`."
-    *   "The `NullifierHash = Hash(nullifier_key)` is unique."
-*   **Public Inputs**: `Merkle Root`, `Nullifier Hash`, `Recipient Address`, `Relayer Address`, `Fee`.
-*   **Private Inputs**: `secret_key`, `nullifier_key`, `Merkle Path`.
-
-#### 4. Sweep (On-chain Withdrawal)
-*   Receiver sends the Proof and Public Inputs to a **Relayer**.
-*   **Relayer** submits `sweep(proof, public_inputs)` to the Program.
-*   **Program**:
-    *   Verifies the ZK Proof against the current (or recent) Merkle Root.
-    *   Checks that `Nullifier Hash` has not been seen before (prevent double-spend).
-    *   Records `Nullifier Hash` as seen.
-    *   Transfers `amount - fee` to `Recipient Address`.
-    *   Transfers `fee` to `Relayer Address`.
-    
-## Result
-*   **Observer sees**: `Payer` deposited into `Shielded Pool`. Later, `Relayer` extracted funds to `Recipient`.
-*   **Linkability**: There is no cryptographic link between the `commitment` (Deposit) and the `nullifier` (Withdrawal). The privacy set is equal to the number of unspent notes in the pool.
+## Why this is the Best Solution
+1.  **Shared Anonymity Set**: Your users hide within the global traffic of Light Protocol, not just your specific app's volume.
+2.  **Zero PDA Rent**: Compressed accounts cost virtually nothing to create and store, unlike standard PDAs which require rent-exemption (~0.002 SOL).
+3.  **Low Complexity**: No need to write custom Circom circuits or manage complex Merkle trees. We leverage the battle-tested infrastructure of Light Protocol.
