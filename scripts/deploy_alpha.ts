@@ -153,7 +153,7 @@ async function main() {
 
   const data: CreateV1InstructionData = {
     ...onChainData,
-    isMutable: true,
+    isMutable: false,
     discriminator: 0,
     tokenStandard: TokenStandard.Fungible,
     collectionDetails: none<CollectionDetails>(),
@@ -196,11 +196,6 @@ async function main() {
   await sendAndConfirmTransaction(connection, mintTx, [payer]);
   console.log("Tokens Minted.");
 
-  // 4. Renounce Ownership
-  // "no one else in the World can ever claim/take ownership"
-  // We renounce:
-  // - Mint Authority: No more tokens can be minted (Fixed Supply).
-  // - Transfer Fee Config Authority: The 5% tax cannot be changed.
   console.log("Renouncing Ownership...");
   const renounceTx = new Transaction().add(
     createSetAuthorityInstruction(

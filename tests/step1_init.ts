@@ -20,13 +20,13 @@ describe("Step 1: Initialize Pay Request", () => {
   const program = anchor.workspace.pay_request as Program<PayRequest>;
 
   const PAYER_SECRET =
-    "44U82XoBrs3vbhBC26Jd1FkMZLnEf4jGY7ogLoxrnkHfxQ7z8mKyjhZswDcnxM2Vz4UF8PDD6NpdxBAx8MG9hLEH";
+    "2VMHZVLPVMLVHQsrCKNdqyUCnHGVEfkLFY8usvXBBQTNCAdQGCxMo9xcFmhiruQYCe7nEUqB11ftB7xbv7BTFvUo";
   const RECEIVER_SECRET =
     "45XNgJWAzqh6UsAVnJbhKmvaiGtsrmkt6XdYy4zNcnhhisNVCC13zGU8d9C8PCjAUxSqW9gXUX4WsQb5nhtN6Bsu";
-
+  //Fp28DsQ48tY7wzNBGKNWngf1GXsAf3w4NJqnc4TBThGs
   // Alpha Token (5% Tax, Renounced)
   const MINT_ADDRESS = new PublicKey(
-    "5bFbWeTaXDhKW33JiMCajWpKT6n1RomzHjAkRCKTY8Kc"
+    "DULmjLxQnfr2a1qKzTjt2xDdWfYJH7dmGpi8azwgG66x"
   );
 
   let payerWallet: Keypair;
